@@ -40,7 +40,10 @@ func (pool ConnPool) ExecContext(ctx context.Context, query string, args ...any)
 			if r.DoubleWrite {
 				pool.sharding.Logger.Trace(ctx, curTime, func() (sql string, rowsAffected int64) {
 					result, _ := pool.ConnPool.ExecContext(ctx, ftQuery, args...)
-					rowsAffected, _ = result.RowsAffected()
+					if result != nil {
+						rowsAffected, _ = result.RowsAffected()
+					}
+
 					return pool.sharding.Explain(ftQuery, args...), rowsAffected
 				}, pool.sharding.Error)
 			}
@@ -50,7 +53,10 @@ func (pool ConnPool) ExecContext(ctx context.Context, query string, args ...any)
 	var result sql.Result
 	result, err = pool.ConnPool.ExecContext(ctx, stQuery, args...)
 	pool.sharding.Logger.Trace(ctx, curTime, func() (sql string, rowsAffected int64) {
-		rowsAffected, _ = result.RowsAffected()
+		if result != nil {
+			rowsAffected, _ = result.RowsAffected()
+		}
+
 		return pool.sharding.Explain(stQuery, args...), rowsAffected
 	}, pool.sharding.Error)
 
