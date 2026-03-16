@@ -103,7 +103,7 @@ type Config struct {
 	PrimaryKeyGeneratorFn func(tableIdx int64) int64
 
 	//通过配置name，区分不同的配置
-	name string
+	Name string
 }
 
 func Register(config Config, tables ...any) *Sharding {
@@ -227,9 +227,9 @@ func (s *Sharding) compile() error {
 
 // Name plugin name for Gorm plugin interface
 func (s *Sharding) Name() string {
-	if s._config.name != "" {
+	if s._config.Name != "" {
 		// gorm:sharding:name
-		return "gorm:sharding:" + s._config.name
+		return "gorm:sharding:" + s._config.Name
 	}
 	return "gorm:sharding"
 }
@@ -282,8 +282,8 @@ func (s *Sharding) Initialize(db *gorm.DB) error {
 
 func (s *Sharding) registerCallbacks(db *gorm.DB) {
 	callbackName := "gorm:sharding"
-	if s._config.name != "" {
-		callbackName = "gorm:sharding:" + s._config.name
+	if s._config.Name != "" {
+		callbackName = "gorm:sharding:" + s._config.Name
 	}
 	s.Callback().Create().Before("*").Register(callbackName, s.switchConn)
 	s.Callback().Query().Before("*").Register(callbackName, s.switchConn)
