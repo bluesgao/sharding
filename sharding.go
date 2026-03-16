@@ -101,6 +101,9 @@ type Config struct {
 	//		return nodes[tableIdx].Generate().Int64()
 	//	}
 	PrimaryKeyGeneratorFn func(tableIdx int64) int64
+
+	//通过配置name，区分不同的配置
+	name string
 }
 
 func Register(config Config, tables ...any) *Sharding {
@@ -224,6 +227,10 @@ func (s *Sharding) compile() error {
 
 // Name plugin name for Gorm plugin interface
 func (s *Sharding) Name() string {
+	if s._config.name != "" {
+		// gorm:sharding:name
+		return "gorm:sharding:" + s._config.name
+	}
 	return "gorm:sharding"
 }
 
@@ -274,12 +281,16 @@ func (s *Sharding) Initialize(db *gorm.DB) error {
 }
 
 func (s *Sharding) registerCallbacks(db *gorm.DB) {
-	s.Callback().Create().Before("*").Register("gorm:sharding", s.switchConn)
-	s.Callback().Query().Before("*").Register("gorm:sharding", s.switchConn)
-	s.Callback().Update().Before("*").Register("gorm:sharding", s.switchConn)
-	s.Callback().Delete().Before("*").Register("gorm:sharding", s.switchConn)
-	s.Callback().Row().Before("*").Register("gorm:sharding", s.switchConn)
-	s.Callback().Raw().Before("*").Register("gorm:sharding", s.switchConn)
+	callbackName := "gorm:sharding"
+	if s._config.name != "" {
+		callbackName = "gorm:sharding:" + s._config.name
+	}
+	s.Callback().Create().Before("*").Register(callbackName, s.switchConn)
+	s.Callback().Query().Before("*").Register(callbackName, s.switchConn)
+	s.Callback().Update().Before("*").Register(callbackName, s.switchConn)
+	s.Callback().Delete().Before("*").Register(callbackName, s.switchConn)
+	s.Callback().Row().Before("*").Register(callbackName, s.switchConn)
+	s.Callback().Raw().Before("*").Register(callbackName, s.switchConn)
 }
 
 func (s *Sharding) switchConn(db *gorm.DB) {
