@@ -31,10 +31,20 @@ type Sharding struct {
 	querys         sync.Map
 	snowflakeNodes []*snowflake.Node
 
-	_config Config
-	_tables []any
+	// _groups holds one or more (Config, tables) pairs. A single *Sharding with
+	// multiple groups uses one ConnPool and one resolve() map — the supported way
+	// to shard different logical tables with different Config values.
+	_groups []TableGroup
 
 	mutex sync.RWMutex
+}
+
+// TableGroup binds one sharding Config to one or more logical tables (table
+// name strings and/or model types). Use RegisterGroups to register several
+// groups in one db.Use call.
+type TableGroup struct {
+	Config Config
+	Tables []any
 }
 
 // Config specifies the configuration for sharding.
@@ -106,26 +116,40 @@ type Config struct {
 	Name string
 }
 
+// Register returns a plugin for one Config and its logical tables. Equivalent to
+// RegisterGroups(TableGroup{Config: config, Tables: tables}).
 func Register(config Config, tables ...any) *Sharding {
-	return &Sharding{
-		_config: config,
-		_tables: tables,
-	}
+	return RegisterGroups(TableGroup{Config: config, Tables: tables})
+}
+
+// RegisterGroups builds one *Sharding that holds multiple Config values (e.g.
+// orders sharded by order_id, users by user_id). Use a single db.Use(plugin);
+// do not call db.Use per table group.
+func RegisterGroups(groups ...TableGroup) *Sharding {
+	return &Sharding{_groups: groups}
 }
 
 func (s *Sharding) compile() error {
 	if s.configs == nil {
 		s.configs = make(map[string]Config)
 	}
-	for _, table := range s._tables {
-		if t, ok := table.(string); ok {
-			s.configs[t] = s._config
-		} else {
-			stmt := &gorm.Statement{DB: s.DB}
-			if err := stmt.Parse(table); err == nil {
-				s.configs[stmt.Table] = s._config
+	if len(s._groups) == 0 {
+		return errors.New("sharding: no TableGroup registered")
+	}
+	for _, g := range s._groups {
+		if len(g.Tables) == 0 {
+			return errors.New("sharding: TableGroup has empty Tables")
+		}
+		for _, table := range g.Tables {
+			if t, ok := table.(string); ok {
+				s.configs[t] = g.Config
 			} else {
-				return err
+				stmt := &gorm.Statement{DB: s.DB}
+				if err := stmt.Parse(table); err == nil {
+					s.configs[stmt.Table] = g.Config
+				} else {
+					return err
+				}
 			}
 		}
 	}
@@ -227,9 +251,8 @@ func (s *Sharding) compile() error {
 
 // Name plugin name for Gorm plugin interface
 func (s *Sharding) Name() string {
-	if s._config.Name != "" {
-		// gorm:sharding:name
-		return "gorm:sharding:" + s._config.Name
+	if len(s._groups) == 1 && s._groups[0].Config.Name != "" {
+		return "gorm:sharding:" + s._groups[0].Config.Name
 	}
 	return "gorm:sharding"
 }
@@ -282,8 +305,8 @@ func (s *Sharding) Initialize(db *gorm.DB) error {
 
 func (s *Sharding) registerCallbacks(db *gorm.DB) {
 	callbackName := "gorm:sharding"
-	if s._config.Name != "" {
-		callbackName = "gorm:sharding:" + s._config.Name
+	if len(s._groups) == 1 && s._groups[0].Config.Name != "" {
+		callbackName = "gorm:sharding:" + s._groups[0].Config.Name
 	}
 	s.Callback().Create().Before("*").Register(callbackName, s.switchConn)
 	s.Callback().Query().Before("*").Register(callbackName, s.switchConn)
