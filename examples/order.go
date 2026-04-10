@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
+	"github.com/bluesgao/sharding"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/sharding"
 )
 
 type Order struct {
